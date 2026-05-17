@@ -1,21 +1,23 @@
 apiVersion: v2
 name: openpanel
-description: A Helm chart for OpenPanel analytics platform
+description: |
+  OpenPanel (openpanel.dev) — self-hostable product analytics —
+  packaged for Kubernetes. Fork of yashGoyal40/openpanel that adds
+  existingSecret support, pinned image tags, and Gateway API
+  HTTPRoute.
 type: application
-version: 0.9.0
+version: 0.10.0
 appVersion: "2.2.1"
 keywords:
   - analytics
   - openpanel
-  - monitoring
-# Add your project homepage URL (optional but recommended)
-home: https://github.com/yashGoyal40
-# Add your repository URL (optional but recommended)
+  - product-analytics
+home: https://openpanel.dev
 sources:
-  - https://github.com/yashGoyal40/openpanel
-# Add an icon URL (optional)
-icon: https://d4.alternativeto.net/-3T-Cph-ZdEcMFklRECy64Qb3JSlmiUa-o2TGZ4pfkI/rs:fit:140:140:0/g:ce:0:0/exar:1/YWJzOi8vZGlzdC9pY29ucy9vcGVucGFuZWwtZGV2XzIzMjU4Ni5zdmc.svg
+  - https://github.com/Openpanel-dev/openpanel
+  - https://github.com/hops-ops/openpanel-chart
 maintainers:
+  - name: Patrick Lee Scott
+    email: pat@patscott.io
   - name: yashGoyal40
-    # Add email for better contact (optional but recommended)
     email: yashg4118@gmail.com
