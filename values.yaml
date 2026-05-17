@@ -309,33 +309,88 @@ config:
   # OAuth redirect URIs
   googleRedirectUri: "https://<fqdn>/api/oauth/google/callback"
 
-# Secrets Configuration
+# ---------------------------------------------------------------------------
+# Secrets
+#
+# Each runtime-credential concern lives in its own Kubernetes Secret so
+# the credential's source-of-truth maps to one Secret (DB creds from
+# CNPG, OAuth client from Zitadel provider, cookie from ESO+AWS SM,
+# etc.) rather than a single monolithic blob.
+#
+# For each concern below:
+#   * `existingSecret: <name>` — Deployments reference that Secret;
+#                                 chart does NOT create one.
+#   * `existingSecret: ""`     — chart creates `openpanel-<concern>`
+#                                 from the inline values. Plaintext —
+#                                 dev only.
+#
+# Every Deployment env var references the per-concern Secret with
+# `secretKeyRef.optional: true` for optional concerns, so the env var
+# simply isn't set when the operator doesn't configure that concern.
+# ---------------------------------------------------------------------------
 secrets:
-  # Name of an existing Secret holding every runtime credential
-  # (DATABASE_URL, DATABASE_URL_DIRECT, REDIS_URL, CLICKHOUSE_URL,
-  # COOKIE_SECRET, plus optional RESEND_API_KEY/EMAIL_SENDER/
-  # GOOGLE_CLIENT_*/OPENAI_API_KEY/ANTHROPIC_API_KEY).
-  #
-  # When set, the chart will NOT create `openpanel-secrets` from the
-  # plaintext values below — Deployments reference your Secret instead.
-  # Source it from ExternalSecrets Operator, sealed-secrets, or any
-  # other secret-management workflow.
-  existingSecret: ""
 
-  # REQUIRED when existingSecret is empty. Generate with: openssl rand -base64 32
-  cookieSecret: "CHANGE_ME_GENERATE_A_RANDOM_32_CHAR_STRING"
-  
-  # Email configuration (optional)
-  resendApiKey: "<resend_api_key>"
-  emailSender: "<email_sender>"
-  
-  # AI features (optional)
-  openaiApiKey: "<openai_api_key>"
-  anthropicApiKey: "<anthropic_api_key>"
-  
-  # Google OAuth (optional)
-  googleClientId: "<google_client_id>"
-  googleClientSecret: "<google_client_secret>"
+  # === database (REQUIRED) ============================================
+  # The app reads DATABASE_URL and DATABASE_URL_DIRECT (Prisma direct
+  # connection used for migrations; same DSN by default).
+  #
+  # Chart-managed mode composes the DSNs from `postgresql.*` (when
+  # `postgresql.enabled`) or `externalPostgresql.*`. Production
+  # installs should set `existingSecret` to a Secret materialized by
+  # ExternalSecrets / sealed-secrets / Crossplane composition.
+  database:
+    existingSecret: ""
+
+  # === redis (REQUIRED) ===============================================
+  # The app reads REDIS_URL.
+  redis:
+    existingSecret: ""
+
+  # === clickhouse (REQUIRED) ==========================================
+  # The app reads CLICKHOUSE_URL.
+  clickhouse:
+    existingSecret: ""
+
+  # === cookie (REQUIRED) ==============================================
+  # 32-byte random session encryption key. Generate with:
+  #   openssl rand -base64 32
+  cookie:
+    existingSecret: ""
+    value: ""   # used only when existingSecret is empty
+
+  # === email (OPTIONAL) ===============================================
+  # Resend-only today. SMTP keys (SMTP_HOST/PORT/SECURE/USER/PASS) are
+  # planned via upstream PR #342; the chart will pick them up
+  # transparently when the Secret has those keys.
+  email:
+    existingSecret: ""
+    resendApiKey: ""
+    sender: ""
+
+  # === oauth-google (OPTIONAL) ========================================
+  oauthGoogle:
+    existingSecret: ""
+    clientId: ""
+    clientSecret: ""
+
+  # === oauth-oidc (OPTIONAL) ==========================================
+  # Generic OIDC provider (Zitadel, Keycloak, Authentik, Okta, etc.).
+  # Requires the openpanel/openpanel-app fork with OIDC support.
+  oauthOidc:
+    existingSecret: ""
+    clientId: ""
+    clientSecret: ""
+    redirectUri: ""              # <dashboard>/api/oauth/oidc/callback
+    authorizationEndpoint: ""
+    tokenEndpoint: ""
+
+  # === ai (OPTIONAL) ==================================================
+  # Set whichever your config.aiModel selects. Both keys are read; the
+  # app picks the appropriate one based on AI_MODEL.
+  ai:
+    existingSecret: ""
+    openaiApiKey: ""
+    anthropicApiKey: ""
 
 # Gateway API HTTPRoute (alternative to ingress.* for clusters running
 # an Istio / Envoy Gateway / Kong / etc. Gateway API implementation).

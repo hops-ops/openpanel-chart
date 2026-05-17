@@ -52,132 +52,138 @@ spec:
               CI=true pnpm -r run migrate:deploy
               pnpm start
           env:
+            # === non-secret config (from openpanel-config ConfigMap) ===
             - name: NODE_ENV
               valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: NODE_ENV
+                configMapKeyRef: { name: openpanel-config, key: NODE_ENV }
             - name: SELF_HOSTED
               valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: SELF_HOSTED
+                configMapKeyRef: { name: openpanel-config, key: SELF_HOSTED }
+            - name: API_URL
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: API_URL }
+            - name: DASHBOARD_URL
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: DASHBOARD_URL }
+            - name: NEXT_PUBLIC_DASHBOARD_URL
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: DASHBOARD_URL }
+            - name: ALLOW_REGISTRATION
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: ALLOW_REGISTRATION }
+            - name: ALLOW_INVITATION
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: ALLOW_INVITATION }
+            - name: AI_MODEL
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: AI_MODEL, optional: true }
+            - name: GOOGLE_REDIRECT_URI
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: GOOGLE_REDIRECT_URI, optional: true }
+            - name: OIDC_DISPLAY_NAME
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: OIDC_DISPLAY_NAME, optional: true }
+            - name: API_PORT
+              value: {{ .Values.api.service.port | quote }}
+            # === database (required) — openpanel-database Secret ===
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.databaseSecretName" . }}
                   key: DATABASE_URL
             - name: DATABASE_URL_DIRECT
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.databaseSecretName" . }}
                   key: DATABASE_URL_DIRECT
+            # === redis (required) — openpanel-redis Secret ===
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.redisSecretName" . }}
                   key: REDIS_URL
+            # === clickhouse (required) — openpanel-clickhouse Secret ===
             - name: CLICKHOUSE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.clickhouseSecretName" . }}
                   key: CLICKHOUSE_URL
-            - name: API_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: API_URL
-            - name: DASHBOARD_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: DASHBOARD_URL
-            - name: NEXT_PUBLIC_DASHBOARD_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: DASHBOARD_URL
+            # === cookie (required) — openpanel-cookie Secret ===
             - name: COOKIE_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.cookieSecretName" . }}
                   key: COOKIE_SECRET
-            - name: ALLOW_REGISTRATION
-              valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: ALLOW_REGISTRATION
-            - name: ALLOW_INVITATION
-              valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: ALLOW_INVITATION
-            - name: API_PORT
-              value: {{ .Values.api.service.port | quote }}
-{{- if .Values.secrets.resendApiKey }}
+            # === email (optional) — openpanel-email Secret ===
             - name: RESEND_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.emailSecretName" . }}
                   key: RESEND_API_KEY
                   optional: true
-{{- end }}
-{{- if .Values.secrets.emailSender }}
             - name: EMAIL_SENDER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.emailSecretName" . }}
                   key: EMAIL_SENDER
                   optional: true
-{{- end }}
-{{- if .Values.secrets.openaiApiKey }}
-            - name: OPENAI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
-                  key: OPENAI_API_KEY
-                  optional: true
-{{- end }}
-{{- if .Values.secrets.anthropicApiKey }}
-            - name: ANTHROPIC_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
-                  key: ANTHROPIC_API_KEY
-                  optional: true
-{{- end }}
-{{- if .Values.config.aiModel }}
-            - name: AI_MODEL
-              valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: AI_MODEL
-                  optional: true
-{{- end }}
-{{- if .Values.secrets.googleClientId }}
+            # === oauth — Google (optional) — openpanel-oauth-google Secret ===
             - name: GOOGLE_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.oauthGoogleSecretName" . }}
                   key: GOOGLE_CLIENT_ID
                   optional: true
-{{- end }}
-{{- if .Values.secrets.googleClientSecret }}
             - name: GOOGLE_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.oauthGoogleSecretName" . }}
                   key: GOOGLE_CLIENT_SECRET
                   optional: true
-{{- end }}
-{{- if .Values.config.googleRedirectUri }}
-            - name: GOOGLE_REDIRECT_URI
+            # === oauth — generic OIDC (optional) — openpanel-oauth-oidc Secret ===
+            - name: OIDC_CLIENT_ID
               valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: GOOGLE_REDIRECT_URI
+                secretKeyRef:
+                  name: {{ include "openpanel.oauthOidcSecretName" . }}
+                  key: OIDC_CLIENT_ID
                   optional: true
-{{- end }}
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openpanel.oauthOidcSecretName" . }}
+                  key: OIDC_CLIENT_SECRET
+                  optional: true
+            - name: OIDC_REDIRECT_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openpanel.oauthOidcSecretName" . }}
+                  key: OIDC_REDIRECT_URI
+                  optional: true
+            - name: OIDC_AUTHORIZATION_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openpanel.oauthOidcSecretName" . }}
+                  key: OIDC_AUTHORIZATION_ENDPOINT
+                  optional: true
+            - name: OIDC_TOKEN_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openpanel.oauthOidcSecretName" . }}
+                  key: OIDC_TOKEN_ENDPOINT
+                  optional: true
+            # === ai (optional) — openpanel-ai Secret ===
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openpanel.aiSecretName" . }}
+                  key: OPENAI_API_KEY
+                  optional: true
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openpanel.aiSecretName" . }}
+                  key: ANTHROPIC_API_KEY
+                  optional: true
           livenessProbe:
             httpGet:
               path: /healthcheck

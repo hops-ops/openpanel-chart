@@ -45,51 +45,55 @@ spec:
             - containerPort: {{ .Values.dashboard.service.port }}
               name: http
           env:
+            # === non-secret config (from openpanel-config ConfigMap) ===
             - name: NODE_ENV
               valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: NODE_ENV
+                configMapKeyRef: { name: openpanel-config, key: NODE_ENV }
             - name: SELF_HOSTED
               valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: SELF_HOSTED
+                configMapKeyRef: { name: openpanel-config, key: SELF_HOSTED }
+            - name: API_URL
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: API_URL }
+            - name: DASHBOARD_URL
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: DASHBOARD_URL }
+            - name: NEXT_PUBLIC_DASHBOARD_URL
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: DASHBOARD_URL }
+            - name: NEXT_PUBLIC_API_URL
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: API_URL }
+            - name: OIDC_DISPLAY_NAME
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: OIDC_DISPLAY_NAME, optional: true }
+            # === database (required) — openpanel-database Secret ===
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.databaseSecretName" . }}
                   key: DATABASE_URL
+            # === redis (required) — openpanel-redis Secret ===
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.redisSecretName" . }}
                   key: REDIS_URL
+            # === clickhouse (required) — openpanel-clickhouse Secret ===
             - name: CLICKHOUSE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "openpanel.secretName" . }}
+                  name: {{ include "openpanel.clickhouseSecretName" . }}
                   key: CLICKHOUSE_URL
-            - name: API_URL
+            # === oauth — generic OIDC (optional) — openpanel-oauth-oidc Secret ===
+            # Dashboard only needs OIDC_CLIENT_ID to know whether to render the
+            # SSO sign-in button — the rest of the OIDC flow runs on the api pod.
+            - name: OIDC_CLIENT_ID
               valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: API_URL
-            - name: DASHBOARD_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: DASHBOARD_URL
-            - name: NEXT_PUBLIC_DASHBOARD_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: DASHBOARD_URL
-            - name: NEXT_PUBLIC_API_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: openpanel-config
-                  key: API_URL
+                secretKeyRef:
+                  name: {{ include "openpanel.oauthOidcSecretName" . }}
+                  key: OIDC_CLIENT_ID
+                  optional: true
           livenessProbe:
             httpGet:
               path: /api/healthcheck
