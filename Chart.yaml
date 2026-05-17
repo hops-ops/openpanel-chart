@@ -3,7 +3,7 @@ name: openpanel
 description: A Helm chart for OpenPanel analytics platform
 type: application
 version: 0.9.0
-appVersion: "latest"
+appVersion: "2.2.1"
 keywords:
   - analytics
   - openpanel
