@@ -11,6 +11,10 @@ on:
       - 'artifacthub-repo.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pages: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -174,6 +178,6 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         if: github.ref == 'refs/heads/main'
         with:
-          github_token: ${{ secrets.GTB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./charts
           keep_files: false
