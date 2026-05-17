@@ -2,24 +2,28 @@ apiVersion: v1
 entries:
   openpanel:
   - apiVersion: v2
-    appVersion: latest
-    created: "2025-12-24T21:01:54.067895068Z"
-    description: A Helm chart for OpenPanel analytics platform
-    digest: 0674042dbf3a2db8561959d445ebaebeb6b35b642fe1b26bd743df493e05a59f
-    home: https://github.com/yashGoyal40
-    icon: https://d4.alternativeto.net/-3T-Cph-ZdEcMFklRECy64Qb3JSlmiUa-o2TGZ4pfkI/rs:fit:140:140:0/g:ce:0:0/exar:1/YWJzOi8vZGlzdC9pY29ucy9vcGVucGFuZWwtZGV2XzIzMjU4Ni5zdmc.svg
+    appVersion: 2.2.1
+    created: "2026-05-17T19:12:15.861754033Z"
+    description: 'OpenPanel (openpanel.dev) — self-hostable product analytics — packaged
+      for Kubernetes. Fork of yashGoyal40/openpanel that adds existingSecret support,
+      pinned image tags, and Gateway API HTTPRoute. '
+    digest: ddabc2c7e9b848a2bdeda6f6d2f070e6af1a32500798678b5604f28947a61481
+    home: https://openpanel.dev
     keywords:
     - analytics
     - openpanel
-    - monitoring
+    - product-analytics
     maintainers:
+    - email: pat@patscott.io
+      name: Patrick Lee Scott
     - email: yashg4118@gmail.com
       name: yashGoyal40
     name: openpanel
     sources:
-    - https://github.com/yashGoyal40/openpanel
+    - https://github.com/Openpanel-dev/openpanel
+    - https://github.com/hops-ops/openpanel-chart
     type: application
     urls:
-    - https://yashGoyal40.github.io/openpanel/openpanel-0.9.0.tgz
-    version: 0.9.0
-generated: "2025-12-24T21:01:54.065980624Z"
+    - https://hops-ops.github.io/openpanel-chart/openpanel-0.10.0.tgz
+    version: 0.10.0
+generated: "2026-05-17T19:12:15.860500579Z"
