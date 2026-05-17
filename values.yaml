@@ -337,6 +337,21 @@ secrets:
   googleClientId: "<google_client_id>"
   googleClientSecret: "<google_client_secret>"
 
+# Gateway API HTTPRoute (alternative to ingress.* for clusters running
+# an Istio / Envoy Gateway / Kong / etc. Gateway API implementation).
+# When enabled, the route attaches to the listed `parentRefs` and
+# splits traffic: `/api` → op-api, everything else → op-dashboard.
+httpRoute:
+  enabled: false
+  # parentRefs is a list of { name, namespace?, sectionName? }.
+  # Example:
+  #   parentRefs:
+  #     - name: platform
+  #       namespace: istio-ingress
+  parentRefs: []
+  # Hostnames the route accepts. When empty, falls back to [ingress.fqdn].
+  hostnames: []
+
 # Ingress Configuration
 ingress:
   enabled: true
