@@ -3,6 +3,31 @@ entries:
   openpanel:
   - apiVersion: v2
     appVersion: 2.2.1
+    created: "2026-05-17T22:22:40.412453485Z"
+    description: 'OpenPanel (openpanel.dev) — self-hostable product analytics — packaged
+      for Kubernetes. Fork of yashGoyal40/openpanel that adds existingSecret support,
+      pinned image tags, and Gateway API HTTPRoute. '
+    digest: 619dcebe5cd8edbe40731f2dcbf24643e18a57cd5b0c5e0ff00004fbf157cc9a
+    home: https://openpanel.dev
+    keywords:
+    - analytics
+    - openpanel
+    - product-analytics
+    maintainers:
+    - email: pat@patscott.io
+      name: Patrick Lee Scott
+    - email: yashg4118@gmail.com
+      name: yashGoyal40
+    name: openpanel
+    sources:
+    - https://github.com/Openpanel-dev/openpanel
+    - https://github.com/hops-ops/openpanel-chart
+    type: application
+    urls:
+    - https://hops-ops.github.io/openpanel-chart/openpanel-0.10.1.tgz
+    version: 0.10.1
+  - apiVersion: v2
+    appVersion: 2.2.1
     created: "2026-05-17T19:12:15.861754033Z"
     description: 'OpenPanel (openpanel.dev) — self-hostable product analytics — packaged
       for Kubernetes. Fork of yashGoyal40/openpanel that adds existingSecret support,
@@ -26,4 +51,4 @@ entries:
     urls:
     - https://hops-ops.github.io/openpanel-chart/openpanel-0.10.0.tgz
     version: 0.10.0
-generated: "2026-05-17T19:12:15.860500579Z"
+generated: "2026-05-17T22:22:40.411139964Z"
