@@ -58,22 +58,22 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: DATABASE_URL
             - name: DATABASE_URL_DIRECT
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: DATABASE_URL_DIRECT
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: REDIS_URL
             - name: CLICKHOUSE_URL
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: CLICKHOUSE_URL
             - name: API_URL
               valueFrom:

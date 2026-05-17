@@ -65,22 +65,22 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: DATABASE_URL
             - name: DATABASE_URL_DIRECT
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: DATABASE_URL_DIRECT
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: REDIS_URL
             - name: CLICKHOUSE_URL
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: CLICKHOUSE_URL
             - name: API_URL
               valueFrom:
@@ -100,7 +100,7 @@ spec:
             - name: COOKIE_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: COOKIE_SECRET
             - name: ALLOW_REGISTRATION
               valueFrom:
@@ -118,7 +118,7 @@ spec:
             - name: RESEND_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: RESEND_API_KEY
                   optional: true
 {{- end }}
@@ -126,7 +126,7 @@ spec:
             - name: EMAIL_SENDER
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: EMAIL_SENDER
                   optional: true
 {{- end }}
@@ -134,7 +134,7 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: OPENAI_API_KEY
                   optional: true
 {{- end }}
@@ -142,7 +142,7 @@ spec:
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: ANTHROPIC_API_KEY
                   optional: true
 {{- end }}
@@ -158,7 +158,7 @@ spec:
             - name: GOOGLE_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: GOOGLE_CLIENT_ID
                   optional: true
 {{- end }}
@@ -166,7 +166,7 @@ spec:
             - name: GOOGLE_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: openpanel-secrets
+                  name: {{ include "openpanel.secretName" . }}
                   key: GOOGLE_CLIENT_SECRET
                   optional: true
 {{- end }}

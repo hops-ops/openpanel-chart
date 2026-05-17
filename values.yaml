@@ -311,7 +311,18 @@ config:
 
 # Secrets Configuration
 secrets:
-  # REQUIRED: Generate with: openssl rand -base64 32
+  # Name of an existing Secret holding every runtime credential
+  # (DATABASE_URL, DATABASE_URL_DIRECT, REDIS_URL, CLICKHOUSE_URL,
+  # COOKIE_SECRET, plus optional RESEND_API_KEY/EMAIL_SENDER/
+  # GOOGLE_CLIENT_*/OPENAI_API_KEY/ANTHROPIC_API_KEY).
+  #
+  # When set, the chart will NOT create `openpanel-secrets` from the
+  # plaintext values below — Deployments reference your Secret instead.
+  # Source it from ExternalSecrets Operator, sealed-secrets, or any
+  # other secret-management workflow.
+  existingSecret: ""
+
+  # REQUIRED when existingSecret is empty. Generate with: openssl rand -base64 32
   cookieSecret: "CHANGE_ME_GENERATE_A_RANDOM_32_CHAR_STRING"
   
   # Email configuration (optional)
