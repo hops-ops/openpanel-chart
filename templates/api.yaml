@@ -96,6 +96,12 @@ spec:
             - name: ADMIN_OIDC_ORG_CLAIM
               valueFrom:
                 configMapKeyRef: { name: openpanel-config, key: ADMIN_OIDC_ORG_CLAIM, optional: true }
+            - name: ADMIN_OIDC_PLATFORM_ADMIN_ROLE
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: ADMIN_OIDC_PLATFORM_ADMIN_ROLE, optional: true }
+            - name: ADMIN_OIDC_PLATFORM_ADMIN_AUDIENCE
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: ADMIN_OIDC_PLATFORM_ADMIN_AUDIENCE, optional: true }
             - name: API_PORT
               value: {{ .Values.api.service.port | quote }}
             # === database (required) — openpanel-database Secret ===

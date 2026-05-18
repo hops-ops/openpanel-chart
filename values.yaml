@@ -400,6 +400,18 @@ adminAuth:
     # Defaults to Zitadel's `urn:zitadel:iam:user:resourceowner:id`.
     # Set to "organization_id" or similar for Keycloak / generic IdPs.
     orgClaim: ""
+    # Optional: role string that, when present in the JWT, elevates the
+    # caller to platform-admin scope (multi-tenant Org CRUD). Defaults
+    # to "openpanel:platform-admin". Works with IdPs that include role
+    # assertions in the access token.
+    platformAdminRole: ""
+    # Optional: `aud` claim value that, when present in the JWT,
+    # elevates the caller to platform-admin scope. Required for Zitadel
+    # client_credentials (Zitadel does not include role assertions in
+    # access tokens). Set to the Zitadel Project ID hosting the
+    # platform-admin role; restrict MachineUser membership of that
+    # project to platform-admins only.
+    platformAdminAudience: ""
 
 # ---------------------------------------------------------------------------
 # Secrets

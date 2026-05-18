@@ -45,4 +45,10 @@ data:
 {{- if .Values.adminAuth.oidc.orgClaim }}
   ADMIN_OIDC_ORG_CLAIM: {{ .Values.adminAuth.oidc.orgClaim | quote }}
 {{- end }}
+{{- if .Values.adminAuth.oidc.platformAdminRole }}
+  ADMIN_OIDC_PLATFORM_ADMIN_ROLE: {{ .Values.adminAuth.oidc.platformAdminRole | quote }}
+{{- end }}
+{{- if .Values.adminAuth.oidc.platformAdminAudience }}
+  ADMIN_OIDC_PLATFORM_ADMIN_AUDIENCE: {{ .Values.adminAuth.oidc.platformAdminAudience | quote }}
+{{- end }}
 {{- end }}
