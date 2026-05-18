@@ -4,11 +4,13 @@
 # (Crossplane / Terraform / scripts) can manage OpenPanel without
 # clicking through the dashboard.
 #
-# Idempotent. Runs as a Helm post-install + post-upgrade hook:
+# Fully idempotent. Runs as a Helm post-install + post-upgrade hook
+# and on manual re-apply:
 #   - If the openpanel-bootstrap-root Secret already exists, exits.
 #   - Else if a root Client already exists in the DB but the Secret is
-#     missing, exits with an error (manual recovery required — the
-#     plaintext secret only exists in the Secret we wrote at first run).
+#     missing, rotates: generates a fresh secret, UPDATEs the existing
+#     Client row, writes the Secret. This recovers cleanly from a
+#     deleted/re-installed cluster Secret without orphaning the row.
 #   - Else: ensures the bootstrap Organization exists, mints a fresh
 #     UUID+secret, scrypt-hashes the secret (matching
 #     packages/common/server::hashPassword), INSERTs the root Client
@@ -81,6 +83,8 @@ data:
     const crypto = require('node:crypto');
     const fs = require('node:fs');
     const https = require('node:https');
+    const net = require('node:net');
+    const { URL } = require('node:url');
     const { Client: PgClient } = require('pg');
 
     const SECRET_NAME = process.env.SECRET_NAME;
@@ -150,6 +154,41 @@ data:
       });
     }
 
+    // TCP probe — wait until host:port accepts a connection. Used to
+    // wait for op-db without pulling a busybox image (Docker Hub
+    // rate-limits unauthenticated pulls, which wedges the Job on a
+    // fresh node).
+    function tcpProbe(host, port, timeoutMs = 2000) {
+      return new Promise((resolve) => {
+        const sock = net.createConnection({ host, port });
+        const done = (ok) => { sock.destroy(); resolve(ok); };
+        sock.setTimeout(timeoutMs);
+        sock.once('connect', () => done(true));
+        sock.once('error', () => done(false));
+        sock.once('timeout', () => done(false));
+      });
+    }
+
+    async function waitForDatabase(connStr, totalTimeoutMs = 300000) {
+      // Parse the connection string (postgres://user:pass@host:port/db?...)
+      // to get host+port for the TCP probe.
+      const url = new URL(connStr);
+      const host = url.hostname;
+      const port = parseInt(url.port || '5432', 10);
+      const deadline = Date.now() + totalTimeoutMs;
+      let attempt = 0;
+      while (Date.now() < deadline) {
+        attempt++;
+        if (await tcpProbe(host, port)) {
+          console.log(`bootstrap: database ${host}:${port} reachable after ${attempt} attempt(s)`);
+          return;
+        }
+        console.log(`bootstrap: waiting for database ${host}:${port} (attempt ${attempt})`);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      throw new Error(`bootstrap: database ${host}:${port} unreachable after ${totalTimeoutMs}ms`);
+    }
+
     async function main() {
       // 1. Idempotency: bail if the bootstrap Secret already exists.
       if (await secretExists(SECRET_NAME)) {
@@ -157,26 +196,15 @@ data:
         return;
       }
 
+      // Wait for op-db before connecting. Mirrors the api pod's own
+      // wait-for-databases initContainer, but without needing an
+      // external image.
+      await waitForDatabase(process.env.DATABASE_URL);
+
       const pg = new PgClient({ connectionString: process.env.DATABASE_URL });
       await pg.connect();
       try {
-        // 2. Recovery guard: a root Client without the matching Secret
-        //    means rotation drift. Surface clearly rather than minting
-        //    a duplicate.
-        const existing = await pg.query(
-          "SELECT id, \"organizationId\" FROM clients WHERE type = 'root' LIMIT 1",
-        );
-        if (existing.rows.length > 0) {
-          throw new Error(
-            `bootstrap: a root Client (${existing.rows[0].id}) already exists in the DB, ` +
-            `but the ${SECRET_NAME} Secret is missing. The original plaintext secret was only ` +
-            `written to the Secret at first-bootstrap time and cannot be recovered. ` +
-            `Either restore the Secret from backup, or DELETE FROM clients WHERE id = '${existing.rows[0].id}' ` +
-            `and re-run the bootstrap job.`,
-          );
-        }
-
-        // 3. Ensure the bootstrap Organization exists. organizationId is
+        // 2. Ensure the bootstrap Organization exists. organizationId is
         //    NOT NULL on the clients table, so we need one to attach to.
         const orgRow = await pg.query('SELECT id FROM organizations WHERE id = $1', [ORG_ID]);
         if (orgRow.rows.length === 0) {
@@ -187,16 +215,39 @@ data:
           console.log(`bootstrap: created Organization ${ORG_ID} (${ORG_NAME})`);
         }
 
-        // 4. Mint the root Client.
-        const clientId = crypto.randomUUID();
+        // 3. Mint plaintext + hash for either insert OR rotate path.
         const plaintext = `sec_${crypto.randomBytes(10).toString('hex')}`;
         const hashed = await scryptHash(plaintext);
-        await pg.query(
-          `INSERT INTO clients (id, name, type, secret, "organizationId", "projectId", "createdAt", "updatedAt")
-           VALUES ($1, $2, 'root', $3, $4, NULL, NOW(), NOW())`,
-          [clientId, CLIENT_NAME, hashed, ORG_ID],
+
+        // 4. Recovery path: a root Client already exists but the Secret
+        //    is missing (e.g. cluster reinstall, accidental kubectl
+        //    delete secret, namespace recreated). Rotate the existing
+        //    row's secret rather than orphaning it; the Client ID is
+        //    preserved so any external references (TF state, Crossplane
+        //    MRs) keep working.
+        const existing = await pg.query(
+          `SELECT id, "organizationId" FROM clients
+           WHERE type = 'root' AND "organizationId" = $1
+           LIMIT 1`,
+          [ORG_ID],
         );
-        console.log(`bootstrap: minted root Client ${clientId} in Org ${ORG_ID}`);
+        let clientId;
+        if (existing.rows.length > 0) {
+          clientId = existing.rows[0].id;
+          await pg.query(
+            'UPDATE clients SET secret = $1, "updatedAt" = NOW() WHERE id = $2',
+            [hashed, clientId],
+          );
+          console.log(`bootstrap: rotated existing root Client ${clientId} in Org ${ORG_ID}`);
+        } else {
+          clientId = crypto.randomUUID();
+          await pg.query(
+            `INSERT INTO clients (id, name, type, secret, "organizationId", "projectId", "createdAt", "updatedAt")
+             VALUES ($1, $2, 'root', $3, $4, NULL, NOW(), NOW())`,
+            [clientId, CLIENT_NAME, hashed, ORG_ID],
+          );
+          console.log(`bootstrap: minted root Client ${clientId} in Org ${ORG_ID}`);
+        }
 
         // 5. Persist plaintext to the chart-managed Secret. After this
         //    runs once, subsequent hook fires short-circuit at step 1.
@@ -236,22 +287,11 @@ spec:
     spec:
       serviceAccountName: openpanel-bootstrap
       restartPolicy: OnFailure
-      # Wait for the api Deployment's database to be reachable. We
-      # piggyback on the api image's wait-for behaviour rather than
-      # duplicating it.
-      initContainers:
-        - name: wait-for-database
-          image: busybox:1.36
-          command:
-            - sh
-            - -c
-            - |
-              echo "Waiting for database to be reachable..."
-              until nc -z {{ default "op-db" .Values.postgresql.service.name }} {{ default 5432 .Values.postgresql.service.port }}; do
-                echo "  ...still waiting for {{ default "op-db" .Values.postgresql.service.name }}:{{ default 5432 .Values.postgresql.service.port }}"
-                sleep 2
-              done
-              echo "Database reachable."
+      # The bootstrap script does its own TCP wait for op-db before
+      # opening the pg connection (see waitForDatabase in
+      # bootstrap.js). We deliberately avoid a busybox initContainer:
+      # Docker Hub rate-limits unauthenticated pulls and wedges the
+      # Job on any node without a cached image.
       containers:
         - name: bootstrap
           image: "{{ .Values.bootstrap.image.repository }}:{{ .Values.bootstrap.image.tag }}"
@@ -271,7 +311,11 @@ spec:
               cd /tmp/bootstrap
               echo '{}' > package.json
               npm install --silent --no-audit --no-fund pg
-              exec node /var/openpanel-bootstrap/bootstrap.js
+              # NODE_PATH lets the script (mounted read-only at
+              # /var/openpanel-bootstrap) resolve `pg` from the
+              # writable node_modules we just installed.
+              exec env NODE_PATH=/tmp/bootstrap/node_modules \
+                node /var/openpanel-bootstrap/bootstrap.js
           env:
             - name: POD_NAMESPACE
               valueFrom:

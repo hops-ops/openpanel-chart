@@ -356,7 +356,12 @@ bootstrap:
     # Generic Node image. The bootstrap container `npm install pg` at
     # job start (single-shot, ~5s) — the openpanel-api image doesn't
     # ship `pg` because Prisma uses its own bundled query engine.
-    repository: node
+    #
+    # Default uses the AWS ECR Public mirror to avoid Docker Hub's
+    # unauthenticated pull rate limit, which silently wedges fresh
+    # cluster installs. Override to `node` (Docker Hub) only if you've
+    # set up `imagePullSecrets` for Docker Hub credentials.
+    repository: public.ecr.aws/docker/library/node
     tag: 20-alpine
     pullPolicy: IfNotPresent
 
