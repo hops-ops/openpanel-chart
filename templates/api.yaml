@@ -83,6 +83,19 @@ spec:
             - name: OIDC_DISPLAY_NAME
               valueFrom:
                 configMapKeyRef: { name: openpanel-config, key: OIDC_DISPLAY_NAME, optional: true }
+            # === admin OIDC (optional) — JWT-bearer auth for /manage routes ===
+            - name: ADMIN_OIDC_ISSUER
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: ADMIN_OIDC_ISSUER, optional: true }
+            - name: ADMIN_OIDC_AUDIENCE
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: ADMIN_OIDC_AUDIENCE, optional: true }
+            - name: ADMIN_OIDC_REQUIRED_ROLE
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: ADMIN_OIDC_REQUIRED_ROLE, optional: true }
+            - name: ADMIN_OIDC_ORG_CLAIM
+              valueFrom:
+                configMapKeyRef: { name: openpanel-config, key: ADMIN_OIDC_ORG_CLAIM, optional: true }
             - name: API_PORT
               value: {{ .Values.api.service.port | quote }}
             # === database (required) — openpanel-database Secret ===

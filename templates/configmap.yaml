@@ -28,3 +28,21 @@ data:
 {{- if .Values.config.googleRedirectUri }}
   GOOGLE_REDIRECT_URI: {{ .Values.config.googleRedirectUri | quote }}
 {{- end }}
+
+  # Admin OIDC auth — opt-in JWT-bearer auth for /manage routes
+  # (requires the openpanel-app fork with feat/admin-jwt-auth merged).
+  # Off when adminAuth.oidc.enabled is false.
+{{- if .Values.adminAuth.oidc.enabled }}
+{{- if .Values.adminAuth.oidc.issuer }}
+  ADMIN_OIDC_ISSUER: {{ .Values.adminAuth.oidc.issuer | quote }}
+{{- end }}
+{{- if .Values.adminAuth.oidc.audience }}
+  ADMIN_OIDC_AUDIENCE: {{ .Values.adminAuth.oidc.audience | quote }}
+{{- end }}
+{{- if .Values.adminAuth.oidc.requiredRole }}
+  ADMIN_OIDC_REQUIRED_ROLE: {{ .Values.adminAuth.oidc.requiredRole | quote }}
+{{- end }}
+{{- if .Values.adminAuth.oidc.orgClaim }}
+  ADMIN_OIDC_ORG_CLAIM: {{ .Values.adminAuth.oidc.orgClaim | quote }}
+{{- end }}
+{{- end }}

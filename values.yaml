@@ -310,6 +310,42 @@ config:
   googleRedirectUri: "https://<fqdn>/api/oauth/google/callback"
 
 # ---------------------------------------------------------------------------
+# Admin OIDC auth — opt-in JWT-bearer auth for /manage routes
+#
+# When enabled, the api pod validates `Authorization: Bearer <jwt>`
+# headers against the configured OIDC issuer's JWKS (discovered via
+# the issuer's `/.well-known/openid-configuration`). Tokens must carry
+# the configured audience and a role claim matching `requiredRole`.
+#
+# Requires the openpanel-app fork (hops-ops/openpanel-app) that adds
+# the validateAdminJwtRequest middleware. With the upstream OpenPanel
+# image, these env vars are simply unset and no behavior changes.
+#
+# Off by default. The existing /manage Client-pair auth
+# (openpanel-client-id + openpanel-client-secret) continues to work
+# either way.
+# ---------------------------------------------------------------------------
+adminAuth:
+  oidc:
+    enabled: false
+    # The OIDC issuer's base URL — e.g. https://auth.example.com.
+    # The api pod fetches <issuer>/.well-known/openid-configuration on
+    # boot to discover the JWKS endpoint.
+    issuer: ""
+    # JWT `aud` claim the api pod requires. Typically the
+    # OpenPanel-admin Application's audience in your IdP.
+    audience: "openpanel-admin"
+    # Role string the api pod requires in the token's claims. Looked up
+    # in `roles[]`, `scope` (space-separated), and Zitadel's nested
+    # `urn:zitadel:iam:org:project:roles` map. Defaults to
+    # "openpanel:admin".
+    requiredRole: "openpanel:admin"
+    # Claim name that holds the Organization ID the token is scoped to.
+    # Defaults to Zitadel's `urn:zitadel:iam:user:resourceowner:id`.
+    # Set to "organization_id" or similar for Keycloak / generic IdPs.
+    orgClaim: ""
+
+# ---------------------------------------------------------------------------
 # Secrets
 #
 # Each runtime-credential concern lives in its own Kubernetes Secret so
