@@ -1,0 +1,304 @@
+{{- if .Values.bootstrap.enabled }}
+# ----------------------------------------------------------------------
+# Bootstrap: mint a root-typed Client at install time so callers
+# (Crossplane / Terraform / scripts) can manage OpenPanel without
+# clicking through the dashboard.
+#
+# Idempotent. Runs as a Helm post-install + post-upgrade hook:
+#   - If the openpanel-bootstrap-root Secret already exists, exits.
+#   - Else if a root Client already exists in the DB but the Secret is
+#     missing, exits with an error (manual recovery required — the
+#     plaintext secret only exists in the Secret we wrote at first run).
+#   - Else: ensures the bootstrap Organization exists, mints a fresh
+#     UUID+secret, scrypt-hashes the secret (matching
+#     packages/common/server::hashPassword), INSERTs the root Client
+#     row, writes the plaintext to the chart-managed Secret.
+#
+# Mirrors how AuthStack's chart bootstraps the Zitadel iam-admin PAT.
+# ----------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openpanel-bootstrap
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openpanel-bootstrap
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openpanel-bootstrap
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: openpanel-bootstrap
+subjects:
+  - kind: ServiceAccount
+    name: openpanel-bootstrap
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openpanel-bootstrap-script
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  bootstrap.js: |
+    // OpenPanel root-Client bootstrap. Runs once per fresh install via
+    // a Helm post-install hook. See templates/bootstrap.yaml for context.
+    //
+    // Reads only Node built-ins so the openpanel-api image (which
+    // bundles `pg` via Prisma) is the easiest carrier. The script is
+    // mounted as a ConfigMap so chart maintainers can edit it without
+    // an image rebuild.
+    'use strict';
+
+    const crypto = require('node:crypto');
+    const fs = require('node:fs');
+    const https = require('node:https');
+    const { Client: PgClient } = require('pg');
+
+    const SECRET_NAME = process.env.SECRET_NAME;
+    const NAMESPACE = process.env.POD_NAMESPACE;
+    const ORG_ID = process.env.BOOTSTRAP_ORG_ID;
+    const ORG_NAME = process.env.BOOTSTRAP_ORG_NAME;
+    const CLIENT_NAME = process.env.BOOTSTRAP_CLIENT_NAME;
+
+    const TOKEN = fs.readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/token', 'utf8').trim();
+    const CA_FILE = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt';
+    const KUBE_HOST = process.env.KUBERNETES_SERVICE_HOST;
+    const KUBE_PORT = process.env.KUBERNETES_SERVICE_PORT;
+
+    function k8sRequest(method, path, body) {
+      return new Promise((resolve, reject) => {
+        const req = https.request({
+          host: KUBE_HOST,
+          port: KUBE_PORT,
+          path,
+          method,
+          ca: fs.readFileSync(CA_FILE),
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/json',
+            accept: 'application/json',
+          },
+        }, (res) => {
+          let buf = '';
+          res.on('data', (chunk) => { buf += chunk; });
+          res.on('end', () => resolve({ status: res.statusCode, body: buf }));
+        });
+        req.on('error', reject);
+        if (body) req.write(JSON.stringify(body));
+        req.end();
+      });
+    }
+
+    async function secretExists(name) {
+      const res = await k8sRequest('GET', `/api/v1/namespaces/${NAMESPACE}/secrets/${name}`);
+      return res.status === 200;
+    }
+
+    async function createSecret(name, data) {
+      const encoded = Object.fromEntries(
+        Object.entries(data).map(([k, v]) => [k, Buffer.from(v).toString('base64')]),
+      );
+      const res = await k8sRequest('POST', `/api/v1/namespaces/${NAMESPACE}/secrets`, {
+        apiVersion: 'v1',
+        kind: 'Secret',
+        metadata: { name },
+        type: 'Opaque',
+        data: encoded,
+      });
+      if (res.status < 200 || res.status >= 300) {
+        throw new Error(`failed to create Secret ${name}: HTTP ${res.status}: ${res.body}`);
+      }
+    }
+
+    // Matches packages/common/server/crypto.ts::hashPassword
+    function scryptHash(password) {
+      return new Promise((resolve, reject) => {
+        const salt = crypto.randomBytes(16).toString('hex');
+        crypto.scrypt(password, salt, 32, (err, key) => {
+          if (err) return reject(err);
+          resolve(`${salt}.${key.toString('hex')}`);
+        });
+      });
+    }
+
+    async function main() {
+      // 1. Idempotency: bail if the bootstrap Secret already exists.
+      if (await secretExists(SECRET_NAME)) {
+        console.log(`bootstrap: ${SECRET_NAME} Secret already exists; nothing to do.`);
+        return;
+      }
+
+      const pg = new PgClient({ connectionString: process.env.DATABASE_URL });
+      await pg.connect();
+      try {
+        // 2. Recovery guard: a root Client without the matching Secret
+        //    means rotation drift. Surface clearly rather than minting
+        //    a duplicate.
+        const existing = await pg.query(
+          "SELECT id, \"organizationId\" FROM clients WHERE type = 'root' LIMIT 1",
+        );
+        if (existing.rows.length > 0) {
+          throw new Error(
+            `bootstrap: a root Client (${existing.rows[0].id}) already exists in the DB, ` +
+            `but the ${SECRET_NAME} Secret is missing. The original plaintext secret was only ` +
+            `written to the Secret at first-bootstrap time and cannot be recovered. ` +
+            `Either restore the Secret from backup, or DELETE FROM clients WHERE id = '${existing.rows[0].id}' ` +
+            `and re-run the bootstrap job.`,
+          );
+        }
+
+        // 3. Ensure the bootstrap Organization exists. organizationId is
+        //    NOT NULL on the clients table, so we need one to attach to.
+        const orgRow = await pg.query('SELECT id FROM organizations WHERE id = $1', [ORG_ID]);
+        if (orgRow.rows.length === 0) {
+          await pg.query(
+            `INSERT INTO organizations (id, name, onboarding) VALUES ($1, $2, 'completed')`,
+            [ORG_ID, ORG_NAME],
+          );
+          console.log(`bootstrap: created Organization ${ORG_ID} (${ORG_NAME})`);
+        }
+
+        // 4. Mint the root Client.
+        const clientId = crypto.randomUUID();
+        const plaintext = `sec_${crypto.randomBytes(10).toString('hex')}`;
+        const hashed = await scryptHash(plaintext);
+        await pg.query(
+          `INSERT INTO clients (id, name, type, secret, "organizationId", "projectId", "createdAt", "updatedAt")
+           VALUES ($1, $2, 'root', $3, $4, NULL, NOW(), NOW())`,
+          [clientId, CLIENT_NAME, hashed, ORG_ID],
+        );
+        console.log(`bootstrap: minted root Client ${clientId} in Org ${ORG_ID}`);
+
+        // 5. Persist plaintext to the chart-managed Secret. After this
+        //    runs once, subsequent hook fires short-circuit at step 1.
+        await createSecret(SECRET_NAME, {
+          'client-id': clientId,
+          'client-secret': plaintext,
+          'organization-id': ORG_ID,
+        });
+        console.log(`bootstrap: wrote ${SECRET_NAME} Secret`);
+      } finally {
+        await pg.end();
+      }
+    }
+
+    main().catch((err) => {
+      console.error(err.message || err);
+      process.exit(1);
+    });
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openpanel-bootstrap
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: openpanel
+        component: bootstrap
+    spec:
+      serviceAccountName: openpanel-bootstrap
+      restartPolicy: OnFailure
+      # Wait for the api Deployment's database to be reachable. We
+      # piggyback on the api image's wait-for behaviour rather than
+      # duplicating it.
+      initContainers:
+        - name: wait-for-database
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for database to be reachable..."
+              until nc -z {{ default "op-db" .Values.postgresql.service.name }} {{ default 5432 .Values.postgresql.service.port }}; do
+                echo "  ...still waiting for {{ default "op-db" .Values.postgresql.service.name }}:{{ default 5432 .Values.postgresql.service.port }}"
+                sleep 2
+              done
+              echo "Database reachable."
+      containers:
+        - name: bootstrap
+          image: "{{ .Values.bootstrap.image.repository }}:{{ .Values.bootstrap.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" .Values.bootstrap.image.pullPolicy }}
+          # node:20-alpine — install `pg` at runtime (the OpenPanel api
+          # image doesn't ship it; Prisma uses its own query engine).
+          # `npm install` runs once per Job invocation; bootstrap only
+          # runs on fresh installs (idempotency check short-circuits
+          # subsequent post-upgrade hooks), so the ~5s cost is paid
+          # once per cluster.
+          workingDir: /tmp/bootstrap
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              cd /tmp/bootstrap
+              echo '{}' > package.json
+              npm install --silent --no-audit --no-fund pg
+              exec node /var/openpanel-bootstrap/bootstrap.js
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SECRET_NAME
+              value: {{ .Values.bootstrap.rootClient.secretName | quote }}
+            - name: BOOTSTRAP_ORG_ID
+              value: {{ .Values.bootstrap.org.id | quote }}
+            - name: BOOTSTRAP_ORG_NAME
+              value: {{ .Values.bootstrap.org.name | quote }}
+            - name: BOOTSTRAP_CLIENT_NAME
+              value: {{ .Values.bootstrap.rootClient.name | quote }}
+            # DATABASE_URL comes from the same Secret the api pod uses,
+            # via the chart's existing openpanel.databaseSecretName helper.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "openpanel.databaseSecretName" . }}
+                  key: DATABASE_URL
+          volumeMounts:
+            - name: script
+              mountPath: /var/openpanel-bootstrap
+              readOnly: true
+      volumes:
+        - name: script
+          configMap:
+            name: openpanel-bootstrap-script
+            defaultMode: 0444
+{{- end }}

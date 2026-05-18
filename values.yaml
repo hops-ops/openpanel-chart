@@ -325,6 +325,57 @@ config:
 # (openpanel-client-id + openpanel-client-secret) continues to work
 # either way.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Bootstrap — mint a root-typed Client at install time
+#
+# Runs as a Helm post-install + post-upgrade hook that idempotently
+# ensures a root Client exists in the DB and persists its plaintext
+# secret to a Kubernetes Secret named `bootstrap.rootClient.secretName`.
+# Subsequent reconciles short-circuit when the Secret already exists.
+#
+# AnalyticsStack composition picks up this Secret and pushes it to AWS
+# Secrets Manager via ESO PushSecret so downstream consumers
+# (provider-upjet-openpanel, hand-rolled scripts, etc.) can pull a
+# root Client cred from anywhere in the fleet without dashboard
+# clicks.
+#
+# Idempotency:
+#   1. If the chart-managed Secret already exists → exit 0.
+#   2. If a root Client exists in the DB but the Secret is missing →
+#      exit non-zero with a recovery hint. The original plaintext
+#      cannot be recovered from the (scrypt-hashed) DB row; operators
+#      restore the Secret from backup or wipe the orphan row.
+#   3. Else mint a fresh UUID + secret, scrypt-hash matching
+#      packages/common/server::hashPassword, INSERT the row, write
+#      the plaintext to the Secret.
+# ---------------------------------------------------------------------------
+bootstrap:
+  enabled: true
+
+  image:
+    # Generic Node image. The bootstrap container `npm install pg` at
+    # job start (single-shot, ~5s) — the openpanel-api image doesn't
+    # ship `pg` because Prisma uses its own bundled query engine.
+    repository: node
+    tag: 20-alpine
+    pullPolicy: IfNotPresent
+
+  org:
+    # ID + name of the Organization the bootstrap Client gets attached
+    # to. `organizationId` is NOT NULL on the clients table so we need
+    # an Org to anchor against. The bootstrap Org is platform-owned —
+    # tenant Orgs are created separately by downstream automation
+    # (TenantStack composition, etc.) using the bootstrap Client.
+    id: platform-admin
+    name: Platform Admin
+
+  rootClient:
+    name: Bootstrap root client
+    # Name of the chart-managed Kubernetes Secret holding the
+    # plaintext credential. Keys: client-id, client-secret,
+    # organization-id.
+    secretName: openpanel-bootstrap-root
+
 adminAuth:
   oidc:
     enabled: false
